@@ -76,20 +76,20 @@ int main() {
 
     {
         auto w = pqxx::work{readconn};
-        auto media = w.exec(
+        const auto media = w.exec(
                 "CREATE TABLE IF NOT EXISTS media ("
                 "media_path text, "
                 "media_name text"
                 ");"
         );
-        auto active = w.exec("CREATE TABLE IF NOT EXISTS active (channel_id bigint);");
+        const auto active = w.exec("CREATE TABLE IF NOT EXISTS active (channel_id bigint);");
         w.commit();
     }
 
     const auto channel_active = [&readconn](dpp::snowflake channel){
         return pqxx::perform([channel = static_cast<uint64_t>(channel), &readconn] {
             auto work = pqxx::work{readconn};
-            auto data = work.exec_prepared("channel_active", channel);
+            const auto data = work.exec_prepared("channel_active", channel);
             work.commit();
 
             //debug(data);
@@ -100,7 +100,7 @@ int main() {
     dpp::snowflake user;
 
     bot.on_message_create([&bot, &user, &channel_active](const auto& ctx){
-        auto id = ctx.msg.author.id;
+        const auto id = ctx.msg.author.id;
         if (!channel_active(ctx.msg.channel_id) or id == user) {
             return;
         }
@@ -112,12 +112,12 @@ int main() {
 
     bot.on_slashcommand([&bot, &readconn, &channel_active](const auto& ctx){
         ctx.thinking();
-        auto cmd = ctx.command.get_command_interaction();
+        const auto cmd = ctx.command.get_command_interaction();
         if (cmd.name == "media") {
             auto subcommand = cmd.options[0];
             if (subcommand.name == "save") {
-                auto path = ctx.command.resolved.attachments.find(subcommand.template get_value<dpp::snowflake>(0))->second.url;
-                auto name = subcommand.template get_value<std::string>(1);
+                const auto path = ctx.command.resolved.attachments.find(subcommand.template get_value<dpp::snowflake>(0))->second.url;
+                const auto name = subcommand.template get_value<std::string>(1);
 
                 auto conn = pqxx::connection{readconn.options()};
                 // new connection to ensure thread safety (this probably has holes)
@@ -133,16 +133,16 @@ int main() {
                 ctx.edit_original_response(dpp::message(format("Saved media as {}.", name)));
             }
             else if (subcommand.name == "get") {
-                auto name = std::get<std::string>(subcommand.options.at(0).value);
-                auto opt_path = pqxx::perform([&readconn, &name] {
+                const auto name = subcommand.template get_value<std::string>(0);
+                const auto opt_path = pqxx::perform([&readconn, &name] {
                     auto work = pqxx::work{readconn};
-                    auto got = work.exec_prepared("media_get", name);
+                    const auto got = work.exec_prepared("media_get", name);
                     work.commit();
                     return got[0][0]; // TODO I think this might dangle
                 });
 
                 if (!opt_path.is_null()) {
-                    auto path = opt_path.template as<std::string>();
+                    const auto path = opt_path.template as<std::string>();
                     bot.log(dpp::ll_debug, format("Returned path {} for name {}", path, name));
                     ctx.edit_original_response(dpp::message(format("{}: {}", name, path)));
                 } else {
@@ -152,7 +152,13 @@ int main() {
             }
         }
         else if (cmd.name == "toggle") {
-            const auto channel = cmd.template get_value<dpp::snowflake>(0);
+            const auto channel = [&ctx] {
+                const auto channel_p = ctx.get_parameter("channel");
+                if (std::holds_alternative<dpp::snowflake>(channel_p)) {
+                    return std::get<dpp::snowflake>(channel_p);
+                }
+                return ctx.command.channel_id;
+            }();
             auto conn = pqxx::connection{readconn.options()};
 
             if (channel_active(channel)) {
