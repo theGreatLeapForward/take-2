@@ -5,9 +5,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <fmt/format.h>
-
-const std::string token = "MTEzMDM4NDQ4Njk3OTM1NDYyNQ.GbWsRI.0iMrv9zigTekcQYqhd7PExZs2zWvC4FWWCktbw";
-// this token dont work lol
+#include <cstdlib>
 
 auto log_init(dpp::cluster& bot, const std::string& name) {
     /* Set up spdlog logger (stolen) */
@@ -54,6 +52,8 @@ auto log_init(dpp::cluster& bot, const std::string& name) {
 
 int main() {
     using fmt::format;
+
+    const std::string token = std::getenv("TOKEN");
 
     auto bot = dpp::cluster(token, dpp::i_default_intents | dpp::i_message_content | dpp::i_guild_members);
     auto log = log_init(bot, "bot.log");
