@@ -86,14 +86,14 @@ int main() {
         w.commit();
     }
 
-    const auto channel_active = [&readconn, &debug](dpp::snowflake channel){
-        return pqxx::perform([channel = static_cast<uint64_t>(channel), &readconn, &debug] {
+    const auto channel_active = [&readconn](dpp::snowflake channel){
+        return pqxx::perform([channel = static_cast<uint64_t>(channel), &readconn] {
             auto work = pqxx::work{readconn};
             auto data = work.exec_prepared("channel_active", channel);
             work.commit();
 
             //debug(data);
-            return data[0][0].as<std::string>() == "f"; // this is kinda hacky tbh
+            return data[0][0].as<std::string>() == "t"; // this is kinda hacky tbh
         });
     };
 
@@ -101,7 +101,7 @@ int main() {
 
     bot.on_message_create([&bot, &user, &channel_active](const auto& ctx){
         auto id = ctx.msg.author.id;
-        if (channel_active(ctx.msg.channel_id) or id == user) {
+        if (!channel_active(ctx.msg.channel_id) or id == user) {
             return;
         }
 
@@ -150,25 +150,28 @@ int main() {
                     ctx.edit_original_response(dpp::message(format("Are you stupid or something? That doesn't exist. (Entered name: {})", name)));
                 }
             }
-        }/*
+        }
         else if (cmd.name == "toggle") {
             const auto channel = cmd.template get_value<dpp::snowflake>(0);
             auto conn = pqxx::connection{readconn.options()};
 
-            const auto [func, response] = [&channel_active, channel, &conn] {
-                if (channel_active(channel)) {
-                    auto f = [&conn] {
-                        auto work = pqxx::work{conn};
-                    };
-                }
-                else {
-                    return std::make_pair([] {}, "");
-                }
-            }();
-
-            pqxx::perform(func);
-            ctx.edit_original_response(dpp::message(response));
-        }*/
+            if (channel_active(channel)) {
+                pqxx::perform([&conn, channel] {
+                   auto work = pqxx::work{conn};
+                   work.exec_params("DELETE FROM active WHERE channel_id = $1;", static_cast<uint64_t>(channel));
+                   work.commit();
+                });
+                ctx.edit_original_response(dpp::message(format("Deactivated channel {}", dpp::find_channel(channel)->name)));
+            }
+            else {
+                pqxx::perform([&conn, channel] {
+                   auto work = pqxx::work{conn};
+                   work.exec_params("INSERT INTO active (channel_id) VALUES ($1);", static_cast<uint64_t>(channel));
+                   work.commit();
+                });
+                ctx.edit_original_response(dpp::message(format("Activated channel {}", dpp::find_channel(channel)->name)));
+            }
+        }
 
     });
 
@@ -186,7 +189,8 @@ int main() {
             add_option(co{dpp::co_sub_command, "get", "get media"}.
                 add_option(co{dpp::co_string, "name", ".", true})),
             sc{"toggle", "toggles whether the bot active (responding to messages) in a channel", bot.me.id}.
-                add_option(co{dpp::co_channel, "channel", "the channel to toggle", true})
+                add_option(co{dpp::co_channel, "channel", "the channel to toggle", false}).
+                set_default_permissions(dpp::p_manage_messages)
         });
     });
 
