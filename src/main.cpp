@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 const std::string token = "MTEzMDM4NDQ4Njk3OTM1NDYyNQ.GbWsRI.0iMrv9zigTekcQYqhd7PExZs2zWvC4FWWCktbw";
+// this token dont work lol
 
 auto log_init(dpp::cluster& bot, const std::string& name) {
     /* Set up spdlog logger (stolen) */
